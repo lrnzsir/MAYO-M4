@@ -17,7 +17,7 @@ limitations under the License.
 */
 
 /*
-The following costant-time comparisons are directly taken from the MAYO
+The following constant-time comparisons are directly taken from the MAYO
 reference implementation, and adapted to be used in this project. The original code can be found
 in arithmetic.h.
 */
@@ -33,7 +33,7 @@ in arithmetic.h.
 #if !(((!defined(__clang__) && defined(__GNUC__) && __GNUC__ <= 12)) && (defined(__x86_64__) || defined(_M_X64)))
 // a > b -> b - a is negative
 // returns 0xFFFFFFFF if true, 0x00000000 if false
-static uint32_t ct_is_greater_than(int a, int b) {
+static inline uint32_t ct_is_greater_than(int a, int b) {
     int32_t diff = b - a;
     return ((uint32_t) (diff >> (8*sizeof(uint32_t)-1)) ^ uint32_t_blocker);
 }

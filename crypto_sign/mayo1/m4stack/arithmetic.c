@@ -186,7 +186,7 @@ bool sample_solution(uint8_t x[KO_ENTRIES_BYTES],
     for (i = 0; i < PARAM_M; i++) {
         for (j = 0; j < PARAM_K * PARAM_O; j++) {
             // y[i] -= A[i][j] * x[j]
-            XOR_NIBBLE(y, i, mul_f(NIBBLE(A[i], j), NIBBLE(x, j)));
+            add_nibble(y, i, mul_f(nibble(A[i], j), nibble(x, j)));
         }
     }
     
@@ -221,15 +221,15 @@ void compute_s(uint8_t s[SIG_BYTES],
         // handle vinegar part
         for (row = 0; row < PARAM_N - PARAM_O; row++) {
             e0 = matrix_entry_val(V, i, row, PARAM_N - PARAM_O);  // v_i[row]
-            XOR_NIBBLE(s, i * PARAM_N + row, e0);
+            add_nibble(s, i * PARAM_N + row, e0);
         }
         // handle oil part and x concatenation
         for (col = 0; col < PARAM_O; col++) {
-            e0 = NIBBLE(x, i * PARAM_O + col); // x[i * PARAM_O + col]
-            XOR_NIBBLE(s, i * PARAM_N + PARAM_N - PARAM_O + col, e0);
+            e0 = nibble(x, i * PARAM_O + col); // x[i * PARAM_O + col]
+            add_nibble(s, i * PARAM_N + PARAM_N - PARAM_O + col, e0);
             for (row = 0; row < PARAM_N - PARAM_O; row++) {
                 e1 = matrix_entry_val(O, row, col, PARAM_O);  // O[row, col]
-                XOR_NIBBLE(s, i * PARAM_N + row, mul_f(e0, e1));
+                add_nibble(s, i * PARAM_N + row, mul_f(e0, e1));
             }
         }
     }

@@ -41,13 +41,6 @@ These are:
 #include "blocker.h"
 #include "comparison.h"
 
-#define NIBBLE(vec, pos) ((((vec)[(pos) / 2] >> (4 * ((pos) & 1))) & 0x0F))
-#define SET_NIBBLE(vec, pos, val) ((vec)[(pos) / 2] = (uint8_t)((val) << (4 * ((pos) & 1))) | (NIBBLE((vec), (pos) ^ 1) << (4 * (((pos) ^ 1) & 1))))
-#define XOR_NIBBLE(vec, pos, val) ((vec)[(pos) / 2] ^= (uint8_t)((val) << (4 * ((pos) & 1))))
-
-#define TO_BYTES(len) (((len) + 1) / 2)
-#define TO_QWORDS(bytes) (((bytes) + 7) / 8)
-
 /**
  * Computes P3 part of the public key from seed_pk and oil_subspace.
  * 
@@ -184,6 +177,45 @@ static inline uint8_t inverse_f(uint8_t a) {
 }
 
 /**
+ * Returns the nibble at position pos in vec
+ * 
+ * @param[in] vec Pointer to a vector of nibbles packed in uint8_t
+ * @param[in] pos Position of the nibble
+ * @return uint8_t The nibble at the specified position
+ */
+static inline uint8_t nibble(const uint8_t *vec, const int pos) {
+    int byte_pos = pos >> 1;
+    int nibble_pos = pos & 1;
+    return (vec[byte_pos] >> (4 * nibble_pos)) & 0x0f;
+}
+
+/**
+ * Sets the nibble at position pos in vec to val
+ * 
+ * @param[out] vec Pointer to a vector of nibbles packed in uint8_t
+ * @param[in] pos Position of the nibble to set
+ * @param[in] val Value to set the nibble to (expected to be in 0..15)
+ */
+static inline void set_nibble(uint8_t *vec, const int pos, const uint8_t val) {
+    int byte_pos = pos >> 1;
+    int nibble_pos = pos & 1;
+    vec[byte_pos] = (vec[byte_pos] & ~(0x0f << (4 * nibble_pos))) | ((val & 0x0f) << (4 * nibble_pos));
+}
+
+/**
+ * Adds the nibble at position pos in vec with val
+ * 
+ * @param[out] vec Pointer to a vector of nibbles packed in uint8_t
+ * @param[in] pos Position of the nibble to add
+ * @param[in] val Value to add to the nibble (expected to be in 0..15)
+ */
+static inline void add_nibble(uint8_t *vec, const int pos, const uint8_t val) {
+    int byte_pos = pos >> 1;
+    int nibble_pos = pos & 1;
+    vec[byte_pos] ^= (val & 0x0f) << (4 * nibble_pos);
+}
+
+/**
  * Retrieves an entry from a GF(16) matrix stored in a packed format.
  * 
  * @param[in] matrix Pointer to the matrix data (each entry is 4 bits, two entries per byte)
@@ -195,7 +227,7 @@ static inline uint8_t inverse_f(uint8_t a) {
 static inline uint8_t matrix_entry_val(const uint8_t *matrix,
                                        const int row, const int col,
                                        const int ncols) {
-    return NIBBLE(matrix, row * ncols + col);
+    return nibble(matrix, row * ncols + col);
 }
 
 /**
@@ -575,7 +607,7 @@ static inline void A_add_M(uint8_t A[PARAM_M][KO_ENTRIES_BYTES],
         for (col = 0; col < PARAM_O; col++) {
             // M_j[row, col] (M is stored transposed)
             coeff = matrix_entry_val(M[j], col, row, PARAM_M);
-            XOR_NIBBLE(A[row], i * PARAM_O + col, coeff);
+            add_nibble(A[row], i * PARAM_O + col, coeff);
         }
     }
     if (i == j) {
@@ -586,7 +618,7 @@ static inline void A_add_M(uint8_t A[PARAM_M][KO_ENTRIES_BYTES],
         for (col = 0; col < PARAM_O; col++) {
             // M_i[row, col] (M is stored transposed)
             coeff = matrix_entry_val(M[i], col, row, PARAM_M);
-            XOR_NIBBLE(A[row], j * PARAM_O + col, coeff);
+            add_nibble(A[row], j * PARAM_O + col, coeff);
         }
     }
 }
@@ -724,11 +756,11 @@ static inline void echelon_form(uint8_t A[PARAM_M][KO_ENTRIES_BYTES],
                 tmp0[byte] ^= A[row][byte] &
                     (is_pivot_row | (below_pivot_row & pivot_is_zero));
             }
-            tmp0[KO_ENTRIES_BYTES] ^= NIBBLE(y, row) &
+            tmp0[KO_ENTRIES_BYTES] ^= nibble(y, row) &
                 (is_pivot_row | (below_pivot_row & pivot_is_zero));
 
             // update pivot_is_zero
-            pivot = NIBBLE(tmp0, pivot_col);
+            pivot = nibble(tmp0, pivot_col);
             pivot_is_zero = ~ct_compare_8(pivot, 0);
         }
 
@@ -744,19 +776,19 @@ static inline void echelon_form(uint8_t A[PARAM_M][KO_ENTRIES_BYTES],
             for (byte = 0; byte < KO_ENTRIES_BYTES; byte++) {
                 A[row][byte] = (do_not_copy & A[row][byte]) + (do_copy & tmp1[byte]);
             }
-            uint8_t new_nibble = (do_not_copy & NIBBLE(y, row)) + 
-                (do_copy & NIBBLE(tmp1, PARAM_K * PARAM_O));
-            SET_NIBBLE(y, row, new_nibble);
+            uint8_t new_nibble = (do_not_copy & nibble(y, row)) + 
+                (do_copy & nibble(tmp1, PARAM_K * PARAM_O));
+            set_nibble(y, row, new_nibble);
         }
 
         // eliminate entries below pivot
         for (row = pivot_row_lb; row < PARAM_M; row++) {
             // negate comparison result to get 1 if row < pivot_row, 0 otherwise
             uint8_t below_pivot = -ct_is_greater_than(row, pivot_row);
-            uint8_t elt_to_elim = NIBBLE(A[row], pivot_col);
+            uint8_t elt_to_elim = nibble(A[row], pivot_col);
             vec_scalarmul_u64(tmp0, TO_QWORDS(KO_ENTRIES_BYTES + 1), tmp1, below_pivot * elt_to_elim);
             vec_add_u8(A[row], tmp0, KO_ENTRIES_BYTES);
-            XOR_NIBBLE(y, row, NIBBLE(tmp0, PARAM_K * PARAM_O));
+            add_nibble(y, row, nibble(tmp0, PARAM_K * PARAM_O));
         }
 
         // update pivot_row, i.e. increment iff pivot is non-zero
@@ -769,7 +801,7 @@ static inline void echelon_form(uint8_t A[PARAM_M][KO_ENTRIES_BYTES],
  * in constant-time.
  * 
  * @param[in] A Input upper-triangular matrix A
- * @param[in] y Input target vector y (its value will be modified during the computation)
+ * @param[in,out] y Input target vector y (its value will be modified during the computation)
  * @param[out] x Output solution vector x initialised with a randomized initial value
  */
 static inline void backward_substitution(uint8_t A[PARAM_M][KO_ENTRIES_BYTES],
@@ -793,14 +825,14 @@ static inline void backward_substitution(uint8_t A[PARAM_M][KO_ENTRIES_BYTES],
         // find first non-zero column in row in constant-time
         for (col = row; col < column_ub; col++) {
             // Compare two bytes in constant time.
-            correct_column = ct_compare_8(NIBBLE(A[row], col), 0) & ~finished;
-            first_nonzero = correct_column & NIBBLE(y, row);
+            correct_column = ct_compare_8(nibble(A[row], col), 0) & ~finished;
+            first_nonzero = correct_column & nibble(y, row);
 
             // x[col] += first_nonzero
-            XOR_NIBBLE(x, col, first_nonzero);
+            add_nibble(x, col, first_nonzero);
             // y -= first_nonzero * A[:, col]
             for (i = 0; i < row; i++) {
-                XOR_NIBBLE(y, i, mul_f(first_nonzero, NIBBLE(A[i], col)));
+                add_nibble(y, i, mul_f(first_nonzero, nibble(A[i], col)));
             }
             
             // mark as finished if we found the first non-zero column

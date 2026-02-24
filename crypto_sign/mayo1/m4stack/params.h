@@ -100,4 +100,7 @@ The structure of this file is inspired by https://github.com/pq-crystals/dilithi
 #define M_ENTRIES_BYTES (PARAM_M / 2)  // number of bytes to store M GF(16) elements
 #define KO_ENTRIES_BYTES ((PARAM_K * PARAM_O) / 2)  // number of bytes to store k*o GF(16) elements
 
+#define TO_BYTES(len) (((len) + 1) / 2)
+#define TO_QWORDS(bytes) (((bytes) + 7) / 8)
+
 #endif  // PARAMS_H
